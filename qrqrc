@@ -1,0 +1,89 @@
+# Configuration file for qrq
+# NOTE: Don't leave any spaces between the = and the assigned value.
+# for example: dspdevice = /dev/dsp won't work!
+# The settings can be changed and saved from within the
+# program, so there is usually no need to manually change anything here.
+
+callsign=YOURCALL     # modify this line with your callsign
+initialspeed=100      # initial speed in LpM (5 LpM = 1 WPM)
+mincharspeed=100      # minimum character speed. below, Farnsworth is used
+dspdevice=/dev/dsp    # your DSP device, usually /dev/dsp (for OSS only)
+
+# risetime and falltime for CW signals in milliseconds
+# values: 1->5 see http://fkurz.net/ham/dah.png
+risetime=2.0
+
+# waveform. Can be 1 = Sine, 2 = Sawtooth, 3 = Square wave
+# Sawtooth and square wave contain more overtones and may be
+# better to hear at very high speeds.
+waveform=1    
+
+# constanttone 
+constanttone=1
+
+# CW tone frequency
+ctonefreq=600     
+
+# allow unlimited repeat (F6)
+unlimitedrepeat=1
+
+# use fixed speed in the attempts, regardless of errors
+fixspeed=1
+
+# allow unlimited attempts (instead of just 50 calls)
+unlimitedattempt=1
+
+# select callbase
+
+cbptr=5
+
+callbase=/home/max/qrq/callsigns/2_letter_digraphs_30.txt
+callbase=/home/max/qrq/callsigns/2_letter_optional_22.txt
+callbase=/home/max/qrq/callsigns/2_letter_states_50.txt
+callbase=/home/max/qrq/callsigns/2_letter_words_21.txt
+callbase=/home/max/qrq/callsigns/2_letter_words_23.txt
+callbase=/home/max/qrq/callsigns/3_char_US_callsigns_743.txt
+callbase=/home/max/qrq/callsigns/3_letter_CW_abbrev_61.txt
+callbase=/home/max/qrq/callsigns/3_letter_names_optional_58.txt
+callbase=/home/max/qrq/callsigns/3_letter_Qcodes_12.txt
+callbase=/home/max/qrq/callsigns/3_letter_QSO_words_17.txt
+callbase=/home/max/qrq/callsigns/3_letter_verbs_28.txt
+callbase=/home/max/qrq/callsigns/3_letter_words_ALL_219.txt
+callbase=/home/max/qrq/callsigns/3_letter_words_EASY_70.txt
+callbase=/home/max/qrq/callsigns/3_letter_words_HARDER_67.txt
+callbase=/home/max/qrq/callsigns/3_letter_words_HARDEST_79.txt
+callbase=/home/max/qrq/callsigns/3_letter_words_optional_62.txt
+callbase=/home/max/qrq/callsigns/4_letter_names_3a_10.txt
+callbase=/home/max/qrq/callsigns/4_letter_names_80.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_10b_83.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_1a_repeat_85.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_2b_43.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_3b_35.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_4a_15.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_4b_58.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_5a_30.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_5b_90.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_637.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_6a_33.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_6b_67.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_7a_19.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_7b_96.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_8a_10.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_8b_30.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_9a_10.txt
+callbase=/home/max/qrq/callsigns/4_letter_words_9b_27.txt
+callbase=/home/max/qrq/callsigns/5_letter_names_67.txt
+callbase=/home/max/qrq/callsigns/5_letter_words_1a_50.txt
+callbase=/home/max/qrq/callsigns/5_letter_words_2a_50.txt
+callbase=/home/max/qrq/callsigns/5_letter_words_3a_50.txt
+callbase=/home/max/qrq/callsigns/5_letter_words_4a_50.txt
+callbase=/home/max/qrq/callsigns/5_letter_words_5a_33.txt
+callbase=/home/max/qrq/callsigns/6_letter_words_1a_40.txt
+callbase=/home/max/qrq/callsigns/6_letter_words_2a_40.txt
+callbase=/home/max/qrq/callsigns/6_letter_words_3a_37.txt
+callbase=/home/max/qrq/callsigns/6_letter_words_4a_49.txt
+callbase=/home/max/qrq/callsigns/6_letter_words_5a_37.txt
+callbase=/home/max/qrq/callsigns/all_callsigns_34896.txt
+callbase=/home/max/qrq/callsigns/english_words_2852.txt
+callbase=/home/max/qrq/callsigns/hack.txt
+
