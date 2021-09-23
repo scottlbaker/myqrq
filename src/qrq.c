@@ -22,6 +22,7 @@
 #include <libgen.h>      // basename
 #include <ctype.h>
 #include <time.h>
+#include <sys/time.h>
 #include <limits.h>      // PATH_MAX
 #include <dirent.h>
 #include <math.h>
@@ -81,8 +82,11 @@ static int ctonefreq = 800;                     // if constanttone=1 use this fr
 static int unlimitedrepeat = 0;                 // allow unlimited repeats
 static int fixspeed = 0;                        // keep speed fixed, regardless of err
 static int unlimitedattempt = 0;                // attempt with all calls  of the DB
-static int attemptvalid = 1;                    // 1 = not using any "cheats"
 static unsigned long int nrofcalls = 0;
+
+static long long starttime = 0;
+static long long endtime = 0;
+static int mstime = 0;
 
 long samplerate = 44100;
 static long long_i;
@@ -112,6 +116,7 @@ static int find_files();
 static int statistics();
 static int read_callbase();
 static void select_callbase();
+static long long get_ms();
 static void help();
 static void callbase_dialog();
 static void parameter_dialog();
@@ -176,10 +181,6 @@ int main(int argc, char *argv[]) {
 
   printw("\nReading configuration file qrqrc \n");
   read_config();
-
-  attemptvalid = 1;
-  // if (unlimitedrepeat || fixspeed || unlimitedattempt)
-  //   attemptvalid = 0;
 
   // read the callsign database
   nrofcalls = read_callbase();
@@ -261,7 +262,7 @@ int main(int argc, char *argv[]) {
       // prompt for own callsign
       i = readline(bot_w, 1, 30, mycall, 1);
 
-      // F5 -> Configure sound
+      // F5 -> configuration
       if (i == 5) {
         parameter_dialog();
         break;
@@ -370,6 +371,7 @@ int main(int argc, char *argv[]) {
         }
 
         tmp[0] = '\0';
+        endtime = get_ms();
         score += calc_score(calls[i], input, speed, tmp);
         update_score();
         if (strcmp(tmp, "*"))           // made an error
@@ -477,10 +479,8 @@ void parameter_dialog() {
       p = 0;                                // cursor position
       break;
     case 'd':                               // go to database browser
-      if (!callnr) {                        // Only allow outside of attempt
         curs_set(1);
         callbase_dialog();
-      }
       break;
     case KEY_F(6):
       freq = constanttone ? ctonefreq : 800;
@@ -505,12 +505,7 @@ void parameter_dialog() {
       wrefresh(right_w);
       return;
     }
-
     speed = initialspeed;
-    attemptvalid = 1;
-    // if (unlimitedrepeat || fixspeed || unlimitedattempt)
-    //   attemptvalid = 0;
-
     update_parameter_dialog();
   }
 }
@@ -555,9 +550,8 @@ void update_parameter_dialog() {
             "                  s", (fixspeed ? "yes" : "no"));
   mvwprintw(conf_w, 10, 2, "Unlimited attempt:     %-3s"
             "                  u", (unlimitedattempt ? "yes" : "no"));
-  if (!callnr)
-    mvwprintw(conf_w, 11, 2, "callbase:     %-15s"
-              "      d (%d)", basename(cbfilename), nrofcalls);
+  mvwprintw(conf_w, 11, 2, "callbase:  %-15s"
+            "   d (%d)", basename(cbfilename), nrofcalls);
 
   mvwprintw(conf_w, 14, 2, "Press F1 to go back");
   wrefresh(conf_w);
@@ -635,14 +629,6 @@ static int readline(WINDOW *win, int y, int x, char *line, int capitals) {
         mode = 1;
         mvwaddstr(win, 1, 55, "INS");
       }
-    } else if (c == KEY_PPAGE && callnr && !attemptvalid) {
-      speed += 5;
-      update_score();
-      wrefresh(top_w);
-    } else if (c == KEY_NPAGE && callnr && !attemptvalid) {
-      if (speed > 20) speed -= 5;
-      update_score();
-      wrefresh(top_w);
     } else if (c == KEY_F(5)) {
       parameter_dialog();
     // alias a bunch of keys to F6 (repeat callsign)
@@ -725,10 +711,7 @@ static int calc_score(char *realcall, char *input, int spd, char *output) {
     output[1] = '\0';
     if (speed > maxspeed) maxspeed = speed;
     if (!fixspeed) speed += 10;
-    if (attemptvalid)
-      return 2 * x * spd;                   // score
-    else
-      return 0;
+    return 2 * x * spd;                     // score
   } else {                                  // assemble error string
     errornr += 1;
     if (strlen(input) >= x) x = strlen(input);
@@ -744,7 +727,7 @@ static int calc_score(char *realcall, char *input, int spd, char *output) {
     if ((speed > 29) && !fixspeed) speed -= 10;
 
     // score when 1-3 mistakes made
-    if ((m < 4) && attemptvalid)
+    if (m < 4)
       return (int)(2 * x * spd) / (5 * m);
     else return 0; ;
   }
@@ -754,10 +737,12 @@ static int calc_score(char *realcall, char *input, int spd, char *output) {
 static int update_score() {
   mvwaddstr(top_w, 1, 10, "Score:                         ");
   mvwprintw(top_w, 2, 10, "File:  %s", basename(cbfilename));
-  if (attemptvalid)
+  if (endtime > starttime) {
+    mstime = (int)(endtime - starttime);
+    mvwprintw(top_w, 1, 17, "%6d   %6d ms", score, mstime);
+  } else {
     mvwprintw(top_w, 1, 17, "%6d", score);
-  else
-    mvwprintw(top_w, 1, 17, "[training mode]", score);
+  }
   wrefresh(top_w);
   return 0;
 }
@@ -1104,6 +1089,7 @@ static void *morse(void *arg)
   write_audio(dsp_fd, &full_buf[0], full_bufpos);
   close_audio(dsp_fd);
   sending_complete = 1;
+  starttime = get_ms();
   return NULL;
 }
 
@@ -1442,6 +1428,12 @@ void select_callbase() {
   curs_set(TRUE);
 }
 
+long long get_ms() {
+  struct timeval te; 
+  gettimeofday(&te, NULL);
+  long long ms = te.tv_sec*1000LL + te.tv_usec/1000;
+  return ms;
+}
 
 void help() {
   printf("qrq v%s  (c) 2006-2013 Fabian Kurz, DJ1YFK. "
