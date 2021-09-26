@@ -4,7 +4,7 @@
 # The settings can be changed and saved from within the
 # program, so there is usually no need to manually change anything here.
 
-callsign=YOURCALL     # modify this line with your callsign
+callsign=KJ7NLA       # your callsign
 initialspeed=100      # initial speed in LpM (5 LpM = 1 WPM)
 mincharspeed=100      # minimum character speed. below, Farnsworth is used
 dspdevice=/dev/dsp    # your DSP device, usually /dev/dsp (for OSS only)
@@ -37,6 +37,8 @@ unlimitedattempt=1
 
 cbptr=5
 
+callbase=/home/max/qrq/callsigns/1_char_punctuation_6.txt
+callbase=/home/max/qrq/callsigns/1_letter_random_26.txt
 callbase=/home/max/qrq/callsigns/2_letter_digraphs_30.txt
 callbase=/home/max/qrq/callsigns/2_letter_optional_22.txt
 callbase=/home/max/qrq/callsigns/2_letter_states_50.txt
@@ -83,7 +85,6 @@ callbase=/home/max/qrq/callsigns/6_letter_words_2a_40.txt
 callbase=/home/max/qrq/callsigns/6_letter_words_3a_37.txt
 callbase=/home/max/qrq/callsigns/6_letter_words_4a_49.txt
 callbase=/home/max/qrq/callsigns/6_letter_words_5a_37.txt
-callbase=/home/max/qrq/callsigns/all_callsigns_34896.txt
+callbase=/home/max/qrq/callsigns/all_callsigns_4995.txt
 callbase=/home/max/qrq/callsigns/english_words_2852.txt
 callbase=/home/max/qrq/callsigns/hack.txt
-
