@@ -1,6 +1,7 @@
 
 // qrq - High speed morse trainer, similar to the DOS classic "Rufz"
-// Copyright (c) 2006-2013  Fabian Kurz
+// original Copyright (c) 2006-2013  Fabian Kurz
+// modifications Copyright (c) 2021  Scott L. Baker
 //
 // This program is free software; you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the Free Software
@@ -38,18 +39,20 @@
 #define SAWTOOTH 2
 #define SQUARE   3
 
+#define MYFREQ   700     // default tone frequency
+#define MAXFREQ  800     // max tone frequency
+#define MINFREQ  400     // min tone frequency
+
+#define VERSION  "0.3.1x"
+
 #ifndef DESTDIR
 #   define DESTDIR "/usr"
-#endif
-
-#ifndef VERSION
-#  define VERSION "0.0.0"
 #endif
 
 #include "pulseaudio.h"
 typedef void *AUDIO_HANDLE;
 
-// callsign array
+// call array
 static char calls[5000][10];
 
 const static char *codetable[] = {
@@ -60,14 +63,15 @@ const static char *codetable[] = {
 };
 
 static char cblist[100][PATH_MAX];              // List of available callbase files
-static int  cbtot   = 0;                        // total callbase entries
-static int  cbptr   = 0;                        // callbase pointer
-static int  page    = 0;                        // callbase display page
-static int  maxpage = 0;                        // max callbase display page
-static int  crpos   = 0;                        // cursor position  
-static char mycall[15] = "DJ1YFK";              // mycall. will be read from qrqrc
-static char dspdevice[PATH_MAX] = "/dev/dsp";   // will also be read from qrqrc
-static int score = 0;                           // qrq score
+static char mycall[15] = "DJ1YFK";              // user callsign read from qrqrc
+static char dspdevice[PATH_MAX] = "/dev/dsp";   // DSP device is read from qrqrc
+
+static int cbtot   = 0;                         // total callbase entries
+static int cbptr   = 0;                         // callbase pointer
+static int page    = 0;                         // callbase display page
+static int maxpage = 0;                         // max callbase display page
+static int crpos   = 0;                         // cursor position
+static int score = 0;                           // session score
 static int sending_complete;                    // global lock for "enter" while sending
 static int singlechar;                          // for single character practice
 static int callnr = 0;                          // nr of actual call in attempt
@@ -75,22 +79,21 @@ static int initialspeed = 200;                  // initial speed. to be read fro
 static int mincharspeed = 0;                    // min. char. speed, below: farnsworth
 static int speed = 200;                         // current speed in cpm
 static int maxspeed = 0;
-static int freq = 800;                          // current cw sidetone freq
 static int errornr = 0;                         // number of errors in attempt
 static int p = 0;                               // position of cursor, relative to x
 static int status = 1;                          // 1= attempt, 2=config
 static int mode = 1;                            // 0 = overwrite, 1 = insert
 static int j = 0;                               // counter etc.
-static int constanttone = 0;                    // if 1 don't change the pitch
-static int ctonefreq = 800;                     // if constanttone=1 use this freq
+static int fixedtone = 1;                       // if 1 don't change the pitch
+static int ctonefreq = MYFREQ;                  // if fixedtone=1 use this freq
+static int freq = MYFREQ;                       // current cw sidetone freq
 static int unlimitedrepeat = 0;                 // allow unlimited repeats
 static int fixspeed = 0;                        // keep speed fixed, regardless of err
-static int unlimitedattempt = 0;                // attempt with all calls  of the DB
-static unsigned long int nrofcalls = 0;
+static int mstime = 0;                          // millisecond timer
 
+static unsigned long int nrofcalls = 0;
 static long long starttime = 0;
 static long long endtime = 0;
-static int mstime = 0;
 
 long samplerate = 44100;
 static long long_i;
@@ -101,6 +104,9 @@ static int ed;                          // risetime, normalized to samplerate
 static short buffer[88200];
 static int full_buf[882000];            // 20 second max buffer
 static int full_bufpos = 0;
+
+#define NTONE 4
+static int ctonelist[NTONE] = {550,600,650,700};
 
 AUDIO_HANDLE dsp_fd;
 
@@ -119,6 +125,7 @@ static int  find_files();
 static int  statistics();
 static int  read_callbase();
 static void select_callbase();
+static void check_tone();
 static long long get_ms();
 static void help();
 static void callbase_dialog();
@@ -137,7 +144,7 @@ char destdir[PATH_MAX] = "";
 
 // create windows
 WINDOW *top_w;                  // actual score
-WINDOW *mid_w;                  // callsign history/mistakes
+WINDOW *mid_w;                  // call history/mistakes
 WINDOW *conf_w;                 // parameter config display
 WINDOW *bot_w;                  // user input line
 WINDOW *inf_w;                  // info window for param displ
@@ -164,7 +171,7 @@ int main(int argc, char *argv[]) {
   keypad(stdscr, TRUE);
   scrollok(stdscr, FALSE);
 
-  printw("\nqrq v%s - by Fabian Kurz, DJ1YFK\n", VERSION);
+  printw("\nqrq v%s   A high-speed morse trainer    \n", VERSION);
   refresh();
 
   // search for toplist and qrqrc
@@ -185,7 +192,7 @@ int main(int argc, char *argv[]) {
   printw("\nReading configuration file qrqrc \n");
   read_config();
 
-  // read the callsign database
+  // read the call database
   nrofcalls = read_callbase();
   printw("\nReading %d lines from: %s\n\n", nrofcalls, basename(cbfilename));
   printw("Press any key to continue...");
@@ -228,25 +235,21 @@ int main(int argc, char *argv[]) {
       box(inf_w, 0, 0);
       box(right_w, 0, 0);
       wattron(top_w, A_BOLD);
-      mvwaddstr(top_w, 1, 1, "QRQ v");
-      mvwaddstr(top_w, 1, 6, VERSION);
+      mvwprintw(top_w, 1, 1, "qrq v%s", VERSION);
       wattroff(top_w, A_BOLD);
-      mvwaddstr(top_w, 1, 11, " by Fabian Kurz, DJ1YFK");
-      mvwaddstr(top_w, 2, 1, "Homepage: http://fkurz.net/ham/qrq.html     ");
+      mvwaddstr(top_w, 1, 12, " :: A high-speed morse code trainer       ");
+      mvwaddstr(top_w, 2, 1,  "                                          ");
       clear_display();
       wattron(mid_w, A_BOLD);
-      mvwaddstr(mid_w, 1, 1, "Usage:");
+      mvwaddstr(mid_w, 1, 1,  "Usage:");
       wattroff(mid_w, A_BOLD);
-      mvwaddstr(mid_w,  2, 2, "After entering your callsign, random callsigns");
-      mvwaddstr(mid_w,  3, 2, "from a database will be sent. After each callsign,");
-      mvwaddstr(mid_w,  4, 2, "enter what you have heard. If you copied correctly,");
-      mvwaddstr(mid_w,  5, 2, "full points are credited and the speed increases by");
-      mvwaddstr(mid_w,  6, 2, "2 WpM -- otherwise the speed decreases and only a ");
-      mvwaddstr(mid_w,  7, 2, "fraction of the points, depending on the number of");
-      mvwaddstr(mid_w,  8, 2, "errors is credited.");
-      mvwaddstr(mid_w, 11, 2, "F6 repeats a callsign");
-      mvwaddstr(mid_w, 12, 2, "Settings can be changed with F5 or in qrqrc");
-      mvwaddstr(mid_w, 13, 2, "Score statistics (requires gnuplot) with F7");
+      mvwaddstr(mid_w,  3, 2, "After entering your callsign, random calls         ");
+      mvwaddstr(mid_w,  4, 2, "from a database will be sent. After each call,     ");
+      mvwaddstr(mid_w,  5, 2, "enter what you have heard. If you copied correctly,");
+      mvwaddstr(mid_w,  6, 2, "then points are credited.                          ");
+      mvwaddstr(mid_w,  9, 2, "Press F5  to change settings                       ");
+      mvwaddstr(mid_w, 10, 2, "Press F6  to repeat a call                         ");
+      mvwaddstr(mid_w, 11, 2, "Press F10 to quit                                  ");
 
       wattron(right_w, A_BOLD);
       mvwaddstr(right_w, 1, 6, "Toplist");
@@ -254,7 +257,7 @@ int main(int argc, char *argv[]) {
       display_toplist();
       p = 0;                    // cursor to start position
       wattron(bot_w, A_BOLD);
-      mvwaddstr(bot_w, 1, 1, "Please enter your callsign                       ");
+      mvwaddstr(bot_w, 1, 1,  "Please enter your callsign                         ");
       wattroff(bot_w, A_BOLD);
       wrefresh(top_w);
       wrefresh(mid_w);
@@ -273,7 +276,6 @@ int main(int argc, char *argv[]) {
       }
       // F6 -> play test CW
       else if (i == 6) {
-        freq = constanttone ? ctonefreq : 800;
         pthread_join(cwthread, NULL);
         j = pthread_create(&cwthread, NULL, &morse, (void *)"VVVTEST");
         check_thread(j);
@@ -291,11 +293,10 @@ int main(int argc, char *argv[]) {
       clear_display();
       wrefresh(mid_w);
 
-      // update toplist (highlight may change)
+      // update toplist
       display_toplist();
-
-      mvwprintw(top_w, 1, 1, "                                      ");
-      mvwprintw(top_w, 2, 1, "                                               ");
+      mvwprintw(top_w, 1, 1, "                                            ");
+      mvwprintw(top_w, 2, 1, "                                            ");
       wattron(top_w, A_BOLD);
       mvwprintw(top_w, 1, 1, "%s", mycall);
       wattroff(top_w, A_BOLD);
@@ -305,28 +306,25 @@ int main(int argc, char *argv[]) {
       // re-read the callbase
       nrofcalls = read_callbase();
 
-      for (callnr = 1; callnr < (unlimitedattempt ? nrofcalls : 51); callnr++) {
-        // wait for the cwthread of the previous callsign
+      for (callnr = 1; callnr < nrofcalls; callnr++) {
+        // wait for the cwthread of the previous call
         pthread_join(cwthread, NULL);
-        // select an unused callsign from the calls-array
-        do
-          i = (int)((float)nrofcalls * rand() / (RAND_MAX + 1.0));
+        // select an unused call from the calls array
+        do i = rand() % (nrofcalls - 1);
         while (calls[i][0] == '\0');
 
         // only relevant for callbases with less than 50 calls
         if (nrofcalls == callnr)        // Only one call left!"
           callnr = 51;                  // Get out after next one
 
-        // output frequency handling a) random b) fixed
-        if (constanttone == 0)
-          // random freq (fraction of samplerate)
-          freq = (int)(samplerate / (50 + (40.0 * rand() / (RAND_MAX + 1.0))));
-        else
-          // fixed frequency
+        // select CW tone
+        if (fixedtone)
           freq = ctonefreq;
+        else
+          freq = ctonelist[rand() % (NTONE)];
 
         mvwprintw(bot_w, 1, 1, "                                      ");
-        mvwprintw(bot_w, 1, 1, "%3d/%s", callnr, unlimitedattempt ? "-" : "50");
+        mvwprintw(bot_w, 1, 1, "%3d/%d", callnr, nrofcalls);
         wrefresh(bot_w);
         tmp[0] = '\0';
 
@@ -340,7 +338,7 @@ int main(int argc, char *argv[]) {
         // check for function key press
         while (!abort && (j = readline(bot_w, 1, 8, input, 1)) > 4) {
           switch (j) {
-          case 6:              // repeat call
+          case 6:              // repeat current call
             if (f6pressed && (unlimitedrepeat == 0)) continue;
             f6pressed = 1;
             // wait for old cwthread to finish, then send call again
@@ -361,7 +359,7 @@ int main(int argc, char *argv[]) {
               freq = k;
             }
             break;
-          case 10:             // abort
+          case 10:             // quit program
             abort = 1;
             break;
           default:
@@ -432,32 +430,25 @@ void parameter_dialog() {
     case 'w':                               // change waveform
       waveform = ((waveform + 1) % 3) + 1;  // toggle 1-2-3
       break;
-    case 'k':                               // constanttone
-      if (ctonefreq >= 160)
-        ctonefreq -= 10;
-      else
-        constanttone = 0;
+    case 'k':                               // fixed or variable CW tone
+      ctonefreq -= 10;
+      check_tone();
       break;
     case 'l':
-      if (constanttone == 0)
-        constanttone = 1;
-      else if (ctonefreq < 1600)
-        ctonefreq += 10;
+      ctonefreq += 10;
+      check_tone();
       break;
     case '0':
-      if (constanttone == 1)
-        constanttone = 0;
+      if (fixedtone == 1)
+        fixedtone = 0;
       else
-        constanttone = 1;
+        fixedtone = 1;
       break;
     case 'f':
       unlimitedrepeat = (unlimitedrepeat ? 0 : 1);
       break;
     case 's':
       fixspeed = (fixspeed ? 0 : 1);
-      break;
-    case 'u':
-      unlimitedattempt = (unlimitedattempt ? 0 : 1);
       break;
     case KEY_UP:
       initialspeed += 10;
@@ -486,7 +477,6 @@ void parameter_dialog() {
         callbase_dialog();
       break;
     case KEY_F(6):
-      freq = constanttone ? ctonefreq : 800;
       pthread_join(cwthread, NULL);
       j = pthread_create(&cwthread, NULL, &morse, (void *)"TESTING");
       check_thread(j);
@@ -544,15 +534,13 @@ void update_parameter_dialog() {
   mvwprintw(conf_w, 5, 2, "Callsign:              %-14s"
             "       c", mycall);
   mvwprintw(conf_w, 6, 2, "CW pitch (0 = random): %-4d"
-            "                 k/l or 0", (constanttone) ? ctonefreq : 0);
+            "                 k/l or 0", (fixedtone) ? ctonefreq : 0);
   mvwprintw(conf_w, 7, 2, "CW waveform:           %-8s"
             "             w", wavename);
   mvwprintw(conf_w, 8, 2, "Unlimited repeat:      %-3s"
             "                  f", (unlimitedrepeat ? "yes" : "no"));
   mvwprintw(conf_w, 9, 2, "Fixed CW speed:        %-3s"
             "                  s", (fixspeed ? "yes" : "no"));
-  mvwprintw(conf_w, 10, 2, "Unlimited attempt:     %-3s"
-            "                  u", (unlimitedattempt ? "yes" : "no"));
   mvwprintw(conf_w, 11, 2, "callbase:  %-15s"
             "   d (%d)", basename(cbfilename), nrofcalls);
 
@@ -565,7 +553,7 @@ void update_parameter_dialog() {
 void callbase_dialog() {
   clear_parameter_display();
   wattron(conf_w, A_BOLD);
-  mvwaddstr(conf_w, 1, 1, "Change Callsign Database");
+  mvwaddstr(conf_w, 1, 1, "Change Call Database");
   wattroff(conf_w, A_BOLD);
   select_callbase();
   wrefresh(conf_w);
@@ -573,7 +561,7 @@ void callbase_dialog() {
 }
 
 
-// read callsign data
+// read call data
 static int readline(WINDOW *win, int y, int x, char *line, int capitals) {
   int c;
   int i = 0;
@@ -648,7 +636,7 @@ static int readline(WINDOW *win, int y, int x, char *line, int capitals) {
       }
     } else if (c == KEY_F(5)) {
       parameter_dialog();
-    // alias a bunch of keys to F6 (repeat callsign)
+    // alias a bunch of keys to F6 (repeat call)
     // for convenience
     } else if ((c == KEY_LEFT)  || (c == KEY_RIGHT) ||
                (c == KEY_DOWN)  || (c == KEY_UP)    ||
@@ -668,7 +656,7 @@ static int readline(WINDOW *win, int y, int x, char *line, int capitals) {
       printf("Thanks for using 'qrq'!\nYou can submit your"
              " highscore to http://fkurz.net/ham/qrqtop.php\n");
       // make sure that no more output is running, then send 73 & quit
-      speed = 200; freq = 800;
+      speed = 200;
       pthread_join(cwthread, NULL);
       j = pthread_create(&cwthread, NULL, &morse, (void *)"73");
       check_thread(j);
@@ -719,40 +707,37 @@ static int display_toplist() {
 // and returns the score for this call. There are no points
 // in training modes (unlimited attempts/repeats, or fixed speed)
 static int calc_score(char *realcall, char *input, int spd, char *output) {
-  int i, x, m = 0;
+  int i, lngth, mistake = 0;
 
-  x = strlen(realcall);
+  lngth = strlen(realcall);
 
   if (strcmp(input, realcall) == 0) {       // exact match!
     output[0] = '*';                        // * == OK, no mistake
     output[1] = '\0';
     if (speed > maxspeed) maxspeed = speed;
     if (!fixspeed) speed += 10;
-    return 2 * x * spd;                     // score
+    return (int)(2 * lngth * spd);          // score
   } else {                                  // assemble error string
     errornr += 1;
-    if (strlen(input) >= x) x = strlen(input);
-    for (i = 0; i < x; i++) {
+    if (strlen(input) >= lngth) lngth = strlen(input);
+    for (i = 0; i < lngth; i++) {
       if (realcall[i] != input[i]) {
-        m++;                                // mistake!
+        mistake++;                          // mistake!
         output[i] = tolower(input[i]);      // print as lower case
       } else {
         output[i] = input[i];
       }
     }
     output[i] = '\0';
+    // slow down if not in fixed speed mode
     if ((speed > 29) && !fixspeed) speed -= 10;
-
-    // score when 1-3 mistakes made
-    if (m < 4)
-      return (int)(2 * x * spd) / (5 * m);
-    else return 0; ;
+    return 0; ;
   }
 }
 
 // print score, current speed and max speed to window
 static int update_score() {
-  mvwaddstr(top_w, 1, 10, "Score:                         ");
+  mvwaddstr(top_w, 1, 10, "Score:                                   ");
   mvwprintw(top_w, 2, 10, "File:  %s", basename(cbfilename));
   if (endtime > starttime) {
     mstime = (int)(endtime - starttime);
@@ -764,7 +749,7 @@ static int update_score() {
   return 0;
 }
 
-// Display the correct callsign and what the user entered
+// Display the correct call and what the user entered
 // with mistakes highlighted
 static int show_error(char *realcall, char *wrongcall) {
   int x = 2;
@@ -829,7 +814,7 @@ static int read_config() {
     line++;
     tmp[strlen(tmp) - 1] = '\0';
 
-    // find callsign, speed etc.
+    // find user callsign, speed etc.
     // only allow if the lines are beginning at zero
     if (tmp == strstr(tmp, "callsign=")) {
       while (isalnum(tmp[i] = toupper(tmp[9 + i])))
@@ -837,9 +822,9 @@ static int read_config() {
       tmp[i] = '\0';
       if (strlen(tmp) < 8) {            // empty call allowed
         strcpy(mycall, tmp);
-        printw("  line  %2d: callsign: %s\n", line, mycall);
+        printw("  line  %2d: call: %s\n", line, mycall);
       } else {
-        printw("  line  %2d: callsign: %s too long. "
+        printw("  line  %2d: call: %s too long. "
                "Using default >%s<.\n", line, tmp, mycall);
       }
     } else if (tmp == strstr(tmp, "initialspeed=")) {
@@ -891,32 +876,33 @@ static int read_config() {
                line, waveform);
         waveform = SINE;
       }
-    } else if (tmp == strstr(tmp, "constanttone=")) {
+    } else if (tmp == strstr(tmp, "fixedtone=")) {
       while (isdigit(tmp[i] = tmp[13 + i]))
         i++;
       tmp[i] = '\0';
       k = 0;
-      k = atoi(tmp);                                // constanttone
+      k = atoi(tmp);
       if ((k * k) > 1) {
         printw("  line  %2d: constant tone: %s invalid. "
-               "Using default %d.\n", line, tmp, constanttone);
+               "Using default %d.\n", line, tmp, fixedtone);
       } else {
-        constanttone = k;
-        printw("  line  %2d: constant tone: %d\n", line, constanttone);
+        fixedtone = k;
+        printw("  line  %2d: constant tone: %d\n", line, fixedtone);
       }
     } else if (tmp == strstr(tmp, "ctonefreq=")) {
       while (isdigit(tmp[i] = tmp[10 + i]))
         i++;
       tmp[i] = '\0';
-      k = 0;
-      k = atoi(tmp);                                // ctonefreq
-      if ((k > 1600) || (k < 100)) {
+      k = atoi(tmp);
+      if ((k > MAXFREQ) || (k < MINFREQ)) {
         printw("  line  %2d: ctonefreq: %s invalid. "
                "Using default %d.\n", line, tmp, ctonefreq);
+        ctonefreq = MYFREQ;
       } else {
         ctonefreq = k;
         printw("  line  %2d: CW tone (Hz): %d\n", line, ctonefreq);
       }
+      freq = ctonefreq;
     } else if (tmp == strstr(tmp, "unlimitedrepeat=")) {
       unlimitedrepeat = 0;
       if (tmp[16] == '1')
@@ -927,11 +913,6 @@ static int read_config() {
       if (tmp[9] == '1')
         fixspeed = 1;
       printw("  line  %2d: fixed speed:  %s\n", line, (fixspeed ? "yes" : "no"));
-    } else if (tmp == strstr(tmp, "unlimitedattempt=")) {
-      unlimitedattempt = 0;
-      if (tmp[17] == '1')
-        unlimitedattempt = 1;
-      printw("  line  %2d: unlimited attempts:  %s\n", line, (unlimitedattempt ? "yes" : "no"));
     } else if (tmp == strstr(tmp, "cbptr=")) {
       while (tmp[6 + i]) {
         tmp[i] = tmp[6 + i];
@@ -971,8 +952,7 @@ static int read_config() {
 }
 
 
-static void *morse(void *arg)
-{
+static void *morse(void *arg) {
   char *text = arg;
   int i, j;
   int c, fulldotlen, dotlen, dashlen, charspeed, farnsworth, fwdotlen;
@@ -984,7 +964,7 @@ static void *morse(void *arg)
   // set bufpos to 0
   full_bufpos = 0;
 
-  // Some silence; otherwise the call starts right after pressing enter
+  // some silence
   tonegen(0, samplerate / 4, SILENCE);
 
   // Farnsworth?
@@ -1042,7 +1022,6 @@ static void *morse(void *arg)
       code = "..--..";     // ?
 
     // code is now available as string with - and .
-
     for (j = 0; j < strlen(code); j++) {
       c = code[j];
       if (c == '.') {
@@ -1282,7 +1261,7 @@ int read_callbase() {
 
   if ((fh = fopen(cbfilename, "r")) == NULL) {
     endwin();
-    fprintf(stderr, "Error: Couldn't read callsign database ('%s')!\n",
+    fprintf(stderr, "Error: Couldn't read call database ('%s')!\n",
             cbfilename);
     exit(EXIT_FAILURE);
   }
@@ -1320,8 +1299,6 @@ int read_callbase() {
       tmp[i - 2] = '\0';
     strcpy(calls[nr], tmp);
     nr++;
-    if (nr == c)                    // may happen if call file corrupted
-      break;
   }
   fclose(fh);
   return nr+1;
@@ -1373,6 +1350,13 @@ void select_callbase() {
   curs_set(TRUE);
 }
 
+
+void check_tone() {
+  if (ctonefreq > MAXFREQ) ctonefreq = MAXFREQ;
+  if (ctonefreq < MINFREQ) ctonefreq = MINFREQ;
+}
+
+
 long long get_ms() {
   struct timeval te; 
   gettimeofday(&te, NULL);
@@ -1380,13 +1364,14 @@ long long get_ms() {
   return ms;
 }
 
+
 void help() {
-  printf("qrq v%s  (c) 2006-2013 Fabian Kurz, DJ1YFK. "
-         "http://fkurz.net/ham/qrq.html\n", VERSION);
-  printf("High speed morse telegraphy trainer, similar to RUFZ.\n\n");
-  printf("This is free software, and you are welcome to redistribute it\n");
-  printf("under certain conditions (see COPYING).\n\n");
-  printf("Start 'qrq' with no command line args for normal operation.\n");
+  printf("\n");
+  printf("qrq (c) 2006-2013 Fabian Kurz, DJ1YFK\n");
+  printf("High speed morse telegraphy trainer\n");
+  printf("This is free software, and you are welcome to\n");
+  printf("redistribute it under certain conditions (see COPYING)\n");
+  printf("Start 'qrq' with no command line args for normal operation\n");
   exit(0);
 }
 

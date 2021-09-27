@@ -1,11 +1,7 @@
 
-VERSION=0.3.1
-DESTDIR?=/usr
-
-CFLAGS:=$(CFLAGS) -D DESTDIR=\"$(DESTDIR)\" -D VERSION=\"$(VERSION)\" -I.
 CC=gcc
+CFLAGS:=-D PA -pthread -I.
 
-CFLAGS:=$(CFLAGS) -D PA -pthread
 LDFLAGS:=$(LDFLAGS) -lpthread -lpulse-simple -lpulse -lncurses
 OBJECTS=qrq.o pulseaudio.o
 
