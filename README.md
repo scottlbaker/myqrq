@@ -19,8 +19,9 @@ Options can be changed in the qrrqrc file or by pressing F5.
 
 ## Compile / Install
 
-compile with: make
-install with: sudo cp qrq /usr/bin
+* compile with: make
+
+* install with: sudo cp qrq /usr/bin
 
 
 ## Example command line
