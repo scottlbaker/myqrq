@@ -1,13 +1,9 @@
 
 ## Summary
 
-qrq is an open source Morse telegraphy trainer, similar to the classic DOS
-version of Rufz by DL4MM, for Linux, Unix, OS X and Windows.
+qrq is a Morse code training program that is intended to help users improve their ability to copy code at high speed.
 
-It is intended for improving the user's ability to copy callsigns at high
-speed as needed for example for contesting. 
-
-This is a modified (linux-only) version of the original qrq program.
+This is a modified (Linux-only) version of the original qrq program by Fabian Kurz, DJ1YFK
 
 
 ## Usage
