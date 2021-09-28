@@ -1,4 +1,5 @@
 # Ignore these files
-*.o
-qrq
-
+src/*.o
+src/qrq
+callsigns/hack.txt
+Summary/*
