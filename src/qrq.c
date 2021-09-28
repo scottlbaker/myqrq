@@ -126,6 +126,7 @@ static int  statistics();
 static int  read_callbase();
 static void select_callbase();
 static void check_tone();
+static void exit_program();
 static long long get_ms();
 static void help();
 static void callbase_dialog();
@@ -153,13 +154,11 @@ WINDOW *right_w;                // highscore list/settings
 
 int main(int argc, char *argv[]) {
   strcpy(destdir, DESTDIR);
-  char abort = 0;
   char tmp[80] = "";
   char input[15] = "";
   int i = 0, j = 0, k = 0;
   char previouscall[80] = "";
   int previousfreq = 0;
-  int f6pressed = 0;
 
   if (argc > 1)
     help();
@@ -247,9 +246,10 @@ int main(int argc, char *argv[]) {
       mvwaddstr(mid_w,  4, 2, "from a database will be sent. After each call,     ");
       mvwaddstr(mid_w,  5, 2, "enter what you have heard. If you copied correctly,");
       mvwaddstr(mid_w,  6, 2, "then points are credited.                          ");
-      mvwaddstr(mid_w,  9, 2, "Press F5  to change settings                       ");
-      mvwaddstr(mid_w, 10, 2, "Press F6  to repeat a call                         ");
-      mvwaddstr(mid_w, 11, 2, "Press F10 to quit                                  ");
+      mvwaddstr(mid_w,  9, 2, "Press F7 to repeat the previous call               ");
+      mvwaddstr(mid_w, 10, 2, "Press F6 or F1 to repeat the current call          ");
+      mvwaddstr(mid_w, 11, 2, "Press F5 to change settings                        ");
+      mvwaddstr(mid_w, 12, 2, "Press F4 to quit                                   ");
 
       wattron(right_w, A_BOLD);
       mvwaddstr(right_w, 1, 6, "Toplist");
@@ -269,6 +269,10 @@ int main(int argc, char *argv[]) {
       // prompt for own callsign
       i = readline(bot_w, 1, 30, mycall, 1);
 
+      // F4 -> quit
+      if (i == 4) {
+        exit_program();
+      }
       // F5 -> configuration
       if (i == 5) {
         parameter_dialog();
@@ -324,7 +328,7 @@ int main(int argc, char *argv[]) {
           freq = ctonelist[rand() % (NTONE)];
 
         mvwprintw(bot_w, 1, 1, "                                      ");
-        mvwprintw(bot_w, 1, 1, "%3d/%d", callnr, nrofcalls);
+        mvwprintw(bot_w, 1, 1, "%d/%d", callnr, nrofcalls-1);
         wrefresh(bot_w);
         tmp[0] = '\0';
 
@@ -333,20 +337,20 @@ int main(int argc, char *argv[]) {
         sending_complete = 0;
         j = pthread_create(&cwthread, NULL, morse, calls[i]);
         check_thread(j);
-        f6pressed = 0;
 
         // check for function key press
-        while (!abort && (j = readline(bot_w, 1, 8, input, 1)) > 4) {
+        while ((j = readline(bot_w, 1, 8, input, 1)) > 1) {
           switch (j) {
-          case 6:              // repeat current call
-            if (f6pressed && (unlimitedrepeat == 0)) continue;
-            f6pressed = 1;
+          case 4:              // F4 -> quit program
+            exit_program();
+            break;
+          case 6:              // F6 -> repeat current call
             // wait for old cwthread to finish, then send call again
             pthread_join(cwthread, NULL);
             j = pthread_create(&cwthread, NULL, &morse, calls[i]);
             check_thread(j);
             break;
-          case 7:              // repeat previous call
+          case 7:              // F7 -> repeat previous call
             if (callnr > 1) {
               k = freq;
               freq = previousfreq;
@@ -359,16 +363,9 @@ int main(int argc, char *argv[]) {
               freq = k;
             }
             break;
-          case 10:             // quit program
-            abort = 1;
-            break;
           default:
             break;
           }
-        }
-        if (abort) {
-          endwin();
-          exit(0);
         }
         tmp[0] = '\0';
         endtime = get_ms();
@@ -384,10 +381,11 @@ int main(int argc, char *argv[]) {
 
       // attempt is over
       callnr = 0;
+      i = nrofcalls-1;
       pthread_join(cwthread, NULL);  // wait for cwthread to finish
       curs_set(0);
       wattron(bot_w, A_BOLD);
-      mvwprintw(bot_w, 1, 1, "Attempt finished. Press any key to continue!");
+      mvwprintw(bot_w, 1, 1, "%d/%d completed.. Press any key to continue!", i,i);
       wattroff(bot_w, A_BOLD);
       wrefresh(bot_w);
 
@@ -414,6 +412,8 @@ int main(int argc, char *argv[]) {
 // Change parameters
 void parameter_dialog() {
   int j = 0;
+
+  #define KEY_RETN 10
 
   update_parameter_dialog();
 
@@ -481,6 +481,7 @@ void parameter_dialog() {
       j = pthread_create(&cwthread, NULL, &morse, (void *)"TESTING");
       check_thread(j);
       break;
+    case KEY_RETN:   // ENTER KEY
     case KEY_F(1):
     case KEY_F(2):
     case KEY_F(3):
@@ -542,9 +543,9 @@ void update_parameter_dialog() {
   mvwprintw(conf_w, 9, 2, "Fixed CW speed:        %-3s"
             "                  s", (fixspeed ? "yes" : "no"));
   mvwprintw(conf_w, 11, 2, "callbase:  %-15s"
-            "   d (%d)", basename(cbfilename), nrofcalls);
+            "   d (%d)", basename(cbfilename), nrofcalls-1);
 
-  mvwprintw(conf_w, 14, 2, "Press F1 to go back");
+  mvwprintw(conf_w, 14, 2, "Press Enter to continue");
   wrefresh(conf_w);
   wrefresh(inf_w);
 }
@@ -626,7 +627,7 @@ static int readline(WINDOW *win, int y, int x, char *line, int capitals) {
       p = 0;
     } else if (c == KEY_END) {
       p = strlen(line);
-    } else if (c == KEY_IC) {                           // INS/OVR
+    } else if (c == KEY_IC) {                  // INS/OVR
       if (mode == 1) {
         mode = 0;
         mvwaddstr(win, 1, 55, "OVR");
@@ -634,36 +635,21 @@ static int readline(WINDOW *win, int y, int x, char *line, int capitals) {
         mode = 1;
         mvwaddstr(win, 1, 55, "INS");
       }
-    } else if (c == KEY_F(5)) {
+    } else if (c == KEY_F(4)) {                // F4 -> quit
+      return 4;
+    } else if (c == KEY_F(5)) {                // F5 -> settings
       parameter_dialog();
-    // alias a bunch of keys to F6 (repeat call)
-    // for convenience
+    // alias multiple keys                     // F6 (repeat call)
     } else if ((c == KEY_LEFT)  || (c == KEY_RIGHT) ||
                (c == KEY_DOWN)  || (c == KEY_UP)    ||
                (c == KEY_PPAGE) || (c == KEY_NPAGE) ||
                (c == KEY_HOME)  || (c == KEY_END)   ||
                (c == KEY_DC)    || (c == KEY_F(1))  ||
                (c == KEY_F(2))  || (c == KEY_F(3))  ||
-               (c == KEY_F(4))  || (c == KEY_F(6))) {
+               (c == KEY_F(6))) {
       return 6;
     } else if (c == KEY_F(7)) {
       return 7;
-    } else if (c == KEY_F(10)) {                // quit
-      if (callnr)                               // quit attempt only
-        return 10;
-      // else: quit program
-      endwin();
-      printf("Thanks for using 'qrq'!\nYou can submit your"
-             " highscore to http://fkurz.net/ham/qrqtop.php\n");
-      // make sure that no more output is running, then send 73 & quit
-      speed = 200;
-      pthread_join(cwthread, NULL);
-      j = pthread_create(&cwthread, NULL, &morse, (void *)"73");
-      check_thread(j);
-      // make sure the cw thread doesn't die with the main thread
-      // Exit the whole main thread
-      pthread_join(cwthread, NULL);
-      exit(0);
     }
     mvwaddstr(win, y, x, "                ");
     mvwaddstr(win, y, x, line);
@@ -1357,6 +1343,20 @@ void check_tone() {
 }
 
 
+void exit_program() {
+  // wait for the cw thread
+  pthread_join(cwthread, NULL);
+  // send 73
+  j = pthread_create(&cwthread, NULL, &morse, (void *)"73");
+  check_thread(j);
+  // wait for the cw thread
+  pthread_join(cwthread, NULL);
+  endwin();
+  printf("\nThank You for using qrq version %s !!\n\n", VERSION);
+  exit(0);
+}
+
+
 long long get_ms() {
   struct timeval te; 
   gettimeofday(&te, NULL);
@@ -1368,7 +1368,7 @@ long long get_ms() {
 void help() {
   printf("\n");
   printf("qrq (c) 2006-2013 Fabian Kurz, DJ1YFK\n");
-  printf("High speed morse telegraphy trainer\n");
+  printf("High speed morse code trainer\n");
   printf("This is free software, and you are welcome to\n");
   printf("redistribute it under certain conditions (see COPYING)\n");
   printf("Start 'qrq' with no command line args for normal operation\n");
