@@ -17,6 +17,11 @@ The previous callsign can be reheard by pressing F7.
 Options can be changed in the qrrqrc file or by pressing F5.
 
 
+## Curses Library
+
+* on Ubuntu install with: sudo apt-get install libncurses5-dev libncursesw5-dev
+
+
 ## Compile / Install
 
 * compile with: make

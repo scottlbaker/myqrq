@@ -1254,11 +1254,9 @@ int read_callbase() {
 
   if ((fh = fopen(cbfilename, "r")) == NULL) {
     endwin();
-    fprintf(stderr, "Error: Couldn't read call database ('%s')!\n",
-            cbfilename);
+    fprintf(stderr, "Error: Couldn't read %s\n", cbfilename);
     exit(EXIT_FAILURE);
   }
-
   // count the lines/calls and lengths
   i = 0;
   while ((c = getc(fh)) != EOF) {
@@ -1269,7 +1267,6 @@ int read_callbase() {
       i = 0;
     }
   }
-
   maxlen++;
   // for single character practice
   if (maxlen == 3) singlechar = 1;
