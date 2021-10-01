@@ -1,6 +1,6 @@
 
-// qrq - High speed morse trainer, similar to the DOS classic "Rufz"
-// original Copyright (c) 2006-2013  Fabian Kurz
+// qrq - High speed morse trainer, similar to the DOS program Rufz
+// original Copyright (c) 2006-2013  Fabian Kurz DJ1YFK
 // modifications Copyright (c) 2021  Scott L. Baker
 //
 // This program is free software; you can redistribute it and/or modify it under
@@ -119,7 +119,7 @@ static int  read_config();
 static int  tonegen(int freq, int length, int waveform);
 static void *morse(void *arg);
 static int  add_to_buf(void *data, int size);
-static int  readline(WINDOW *win, int y, int x, char *line, int i);
+static int  readline(WINDOW *win, int y, int x, char *line);
 static void check_thread(int j);
 static int  find_files();
 static int  statistics();
@@ -267,7 +267,7 @@ int main(int argc, char *argv[]) {
       speed = initialspeed;
 
       // prompt for own callsign
-      i = readline(bot_w, 1, 30, mycall, 1);
+      i = readline(bot_w, 1, 30, mycall);
 
       // F4 -> quit
       if (i == 4) {
@@ -339,7 +339,7 @@ int main(int argc, char *argv[]) {
         check_thread(j);
 
         // check for function key press
-        while ((j = readline(bot_w, 1, 8, input, 1)) > 1) {
+        while ((j = readline(bot_w, 1, 8, input)) > 1) {
           switch (j) {
           case 4:              // F4 -> quit program
             exit_program();
@@ -465,7 +465,7 @@ void parameter_dialog() {
         mincharspeed -= 10;
       break;
     case 'c':
-      readline(conf_w, 5, 25, mycall, 1);
+      readline(conf_w, 5, 25, mycall);
       if (strlen(mycall) == 0)
         strcpy(mycall, "NOCALL");
       else if (strlen(mycall) > 7)          // cut excessively long calls
@@ -563,7 +563,7 @@ void callbase_dialog() {
 
 
 // read call data
-static int readline(WINDOW *win, int y, int x, char *line, int capitals) {
+static int readline(WINDOW *win, int y, int x, char *line) {
   int c;
   int i = 0;
 
@@ -591,6 +591,7 @@ static int readline(WINDOW *win, int y, int x, char *line, int capitals) {
          (c == '.') || (c == ',') ||
          (c == '#') || (c == '!') ||
          (c == ';') || (c == '-') ||
+         (c == ' ') ||
          (c == '+') || (c == '?')) && (strlen(line) < 14)) {
 
       // for single character practice
@@ -601,8 +602,7 @@ static int readline(WINDOW *win, int y, int x, char *line, int capitals) {
       }
 
       line[strlen(line) + 1] = '\0';
-      if (capitals)
-        c = toupper(c);
+      c = toupper(c);
       if (mode == 1) {                       // insert
         for (i = strlen(line); i > p; i--)   // move all chars by one
           line[i] = line[i - 1];
@@ -1004,18 +1004,25 @@ static void *morse(void *arg) {
       code = ".-.-.";
     else if (c == '-')
       code = "-....-";
+    else if (c == ' ')
+      code = " ";
     else
       code = "..--..";     // ?
 
-    // code is now available as string with - and .
+    // generate dots, dashes, and space
     for (j = 0; j < strlen(code); j++) {
       c = code[j];
       if (c == '.') {
+        // dot
         tonegen(freq, dotlen + ed, waveform);
         tonegen(0, fulldotlen - ed, SILENCE);
-      } else {
+      } else if (c == '-') {
+        // dash
         tonegen(freq, dashlen + ed, waveform);
         tonegen(0, fulldotlen - ed, SILENCE);
+      } else {
+        // space
+        tonegen(0, 3*fulldotlen, SILENCE);
       }
     }
     if (farnsworth)
