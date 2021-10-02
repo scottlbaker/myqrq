@@ -43,11 +43,9 @@
 #define MAXFREQ  800     // max tone frequency
 #define MINFREQ  400     // min tone frequency
 
+#define DESTDIR "/usr"
+#define CALLDIR "/qrq/callsigns/"
 #define VERSION  "0.3.1x"
-
-#ifndef DESTDIR
-#   define DESTDIR "/usr"
-#endif
 
 #include "pulseaudio.h"
 typedef void *AUDIO_HANDLE;
@@ -65,6 +63,7 @@ const static char *codetable[] = {
 static char cblist[100][PATH_MAX];              // List of available callbase files
 static char mycall[15] = "DJ1YFK";              // user callsign read from qrqrc
 static char dspdevice[PATH_MAX] = "/dev/dsp";   // DSP device is read from qrqrc
+static char *homedir = NULL;
 
 static int cbtot   = 0;                         // total callbase entries
 static int cbptr   = 0;                         // callbase pointer
@@ -159,11 +158,17 @@ int main(int argc, char *argv[]) {
   int i = 0, j = 0, k = 0;
   char previouscall[80] = "";
   int previousfreq = 0;
-
+  // check if help is needed
   if (argc > 1)
     help();
-
-  (void)initscr();
+  // get $HOME env var
+  homedir = getenv("HOME");
+  if (!homedir) {
+    endwin();
+    fprintf(stderr, "Couldn't find HOME\n");
+    exit(0);
+  }
+  initscr();
   cbreak();
   noecho();
   curs_set(FALSE);
@@ -177,8 +182,9 @@ int main(int argc, char *argv[]) {
   find_files();
 
   // buffer for audio
-  for (long_i = 0; long_i < 88200; long_i++)
+  for (long_i = 0; long_i < 88200; long_i++) {
     buffer[long_i] = 0;
+  }
 
   // random seed
   srand((unsigned)time(NULL));
@@ -668,7 +674,7 @@ static int display_toplist() {
 
   if ((fh = fopen(tlfilename, "a+")) == NULL) {
     endwin();
-    fprintf(stderr, "Couldn't read or create file '%s'!", tlfilename);
+    fprintf(stderr, "Couldn't open list %s\n", tlfilename);
     exit(EXIT_FAILURE);
   }
   rewind(fh);                        // go to beginning of file
@@ -791,7 +797,7 @@ static int read_config() {
 
   if ((fh = fopen(rcfilename, "r")) == NULL) {
     endwin();
-    fprintf(stderr, "Unable to open config file %s!\n", rcfilename);
+    fprintf(stderr, "Couldn't read config %s\n", rcfilename);
     exit(EXIT_FAILURE);
   }
 
@@ -914,7 +920,9 @@ static int read_config() {
       tmp[i] = '\0';
       // populate cblist
       if (strlen(tmp) > 1) {
-        strcpy(cblist[cbtot++], tmp);
+        strcpy(cblist[cbtot], homedir);
+        strcat(cblist[cbtot], CALLDIR);
+        strcat(cblist[cbtot++], tmp);
       } else {
         printw("  line  %2d: invalid path: %s\n", line, tmp);
         exit(0);
@@ -1093,105 +1101,30 @@ static void check_thread(int j) {
 // 4) Nowhere --> Exit
 static int find_files() {
   FILE *fh;
-  const char *homedir = NULL;
-  char tmp_rcfilename[1024] = "";
-  char tmp_tlfilename[1024] = "";
-  char tmp_cbfilename[1024] = "";
 
   printw("\nChecking for qrqrc and toplist files\n");
 
   if (((fh = fopen("qrqrc", "r")) == NULL) ||
       ((fh = fopen("toplist", "r")) == NULL)) {
-    if ((homedir = getenv("HOME")) != NULL) {
-      printw("... not found in current directory. Checking "
-             "%s/qrq/...\n", homedir);
-      refresh();
-      strcat(rcfilename, homedir);
-    } else {
-      printw("... not found in current directory. Checking "
-             "./qrq/...\n", homedir);
-      refresh();
-      strcat(rcfilename, ".");
-    }
-
+    printw(".. not found in current directory\n", homedir);
+    refresh();
+    strcpy(rcfilename, homedir);
     strcat(rcfilename, "/qrq/qrqrc");
+    strcpy(tlfilename, homedir);
+    strcat(tlfilename, "/qrq/toplist");
 
     // check if there is ~/qrq/qrqrc
-    if ((fh = fopen(rcfilename, "r")) == NULL) {
-      printw("... not found in %s/qrq/. Checking %s/share/qrq..."
-             "\n", homedir, destdir);
-      // check for the files in DESTDIR/share/qrq/. if exists, copy
-      // qrqrc and toplist to ~/qrq/
-
-      strcpy(tmp_rcfilename, destdir);
-      strcat(tmp_rcfilename, "/share/qrq/qrqrc");
-      strcpy(tmp_tlfilename, destdir);
-      strcat(tmp_tlfilename, "/share/qrq/toplist");
-
-      if (((fh = fopen(tmp_rcfilename, "r")) == NULL) ||
-          ((fh = fopen(tmp_tlfilename, "r")) == NULL) ||
-          ((fh = fopen(tmp_cbfilename, "r")) == NULL)) {
-        printw("Could not find qrqrc and toplist.. Exiting..\n");
-        getch();
-        endwin();
-        exit(EXIT_FAILURE);
-      } else {
-        // finally found it in DESTDIR/share/qrq/ !
-        // abusing rcfilename here for something else temporarily
-        printw("Found files in %s/share/qrq/."
-               "\nCreating directory %s/qrq/ and copy qrqrc and"
-               " toplist there.\n", destdir, homedir);
-        strcpy(rcfilename, homedir);
-        strcat(rcfilename, "/qrq/");
-        j = mkdir(rcfilename, 0777);
-
-        if (j && (errno != EEXIST)) {
-          printw("Failed to create %s! Exit.\n", rcfilename);
-          getch();
-          endwin();
-          exit(EXIT_FAILURE);
-        }
-        // now we created the directory, we can read in
-        // DESTDIR/local/, so I assume copying files won't cause any
-        // problem, with system()...
-
-        strcpy(rcfilename, "install -m 644 ");
-        strcat(rcfilename, tmp_tlfilename);
-        strcat(rcfilename, " ");
-        strcat(rcfilename, homedir);
-        strcat(rcfilename, "/qrq/ 2> /dev/null");
-        if (system(rcfilename)) {
-          printw("Failed to copy toplist file: %s\n", rcfilename);
-          getch();
-          endwin();
-          exit(EXIT_FAILURE);
-        }
-        strcpy(rcfilename, "install -m 644 ");
-        strcat(rcfilename, tmp_rcfilename);
-        strcat(rcfilename, " ");
-        strcat(rcfilename, homedir);
-        strcat(rcfilename, "/qrq/ 2> /dev/null");
-        if (system(rcfilename)) {
-          printw("Failed to copy qrqrc file: %s\n", rcfilename);
-          getch();
-          endwin();
-          exit(EXIT_FAILURE);
-        }
-        printw("Files copied. You might want to edit "
-               "qrqrc according to your needs.\n", homedir);
-        strcpy(rcfilename, homedir);
-        strcat(rcfilename, "/qrq/qrqrc");
-        strcpy(tlfilename, homedir);
-        strcat(tlfilename, "/qrq/toplist");
-        strcpy(cbfilename, tmp_cbfilename);
-      }       // found in DESTDIR/share/qrq/
+    if (((fh = fopen(rcfilename, "r")) == NULL) ||
+        ((fh = fopen(tlfilename, "r")) == NULL)) {
+      printw(".. not found in %s/qrq\n", homedir);
+      getch();
+      endwin();
+      exit(EXIT_FAILURE);
     } else {
-      printw("... found files in %s/qrq\n", homedir);
-      strcat(tlfilename, homedir);
-      strcat(tlfilename, "/qrq/toplist");
+      printw(".. found files in %s/qrq\n", homedir);
     }
   } else {
-    printw("... found in current directory\n");
+    printw(".. found files in current directory\n");
     strcpy(rcfilename, "qrqrc");
     strcpy(tlfilename, "toplist");
   }
@@ -1210,12 +1143,12 @@ static int statistics() {
   FILE *fh2;
 
   if ((fh = fopen(tlfilename, "r")) == NULL) {
-    fprintf(stderr, "Unable to open toplist.");
+    fprintf(stderr, "Couldn't read list %s\n", tlfilename);
     exit(0);
   }
 
   if ((fh2 = fopen("/tmp/qrq-plot", "w+")) == NULL) {
-    fprintf(stderr, "Unable to open /tmp/qrq-plot.");
+    fprintf(stderr, "Couldn't open /tmp/qrq-plot\n");
     exit(0);
   }
 
@@ -1254,7 +1187,7 @@ int read_callbase() {
 
   if ((fh = fopen(cbfilename, "r")) == NULL) {
     endwin();
-    fprintf(stderr, "Error: Couldn't read %s\n", cbfilename);
+    fprintf(stderr, "Couldn't read call file %s\n", cbfilename);
     exit(EXIT_FAILURE);
   }
   // count the lines/calls and lengths
