@@ -603,7 +603,7 @@ static int readline(WINDOW *win, int y, int x, char *line) {
       // for single character practice
       if (singlechar) {
         line[p] = toupper(c);
-        line[strlen(line) + 1] = '\0';
+        line[p + 1] = '\0';
         break;
       }
 
