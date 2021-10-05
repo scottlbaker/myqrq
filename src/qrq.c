@@ -72,7 +72,7 @@ static int maxpage = 0;                         // max callbase display page
 static int crpos   = 0;                         // cursor position
 static int score = 0;                           // session score
 static int sending_complete;                    // global lock for "enter" while sending
-static int singlechar;                          // for single character practice
+static int scp = 0;                             // for single character practice
 static int callnr = 0;                          // nr of actual call in attempt
 static int initialspeed = 200;                  // initial speed. to be read from file
 static int mincharspeed = 0;                    // min. char. speed, below: farnsworth
@@ -118,7 +118,7 @@ static int  read_config();
 static int  tonegen(int freq, int length, int waveform);
 static void *morse(void *arg);
 static int  add_to_buf(void *data, int size);
-static int  readline(WINDOW *win, int y, int x, char *line);
+static int  readline(WINDOW *win, int y, int x, char *line, int scp);
 static void check_thread(int j);
 static int  find_files();
 static int  statistics();
@@ -273,7 +273,7 @@ int main(int argc, char *argv[]) {
       speed = initialspeed;
 
       // prompt for own callsign
-      i = readline(bot_w, 1, 30, mycall);
+      i = readline(bot_w, 1, 30, mycall, 0);
 
       // F4 -> quit
       if (i == 4) {
@@ -345,7 +345,7 @@ int main(int argc, char *argv[]) {
         check_thread(j);
 
         // check for function key press
-        while ((j = readline(bot_w, 1, 8, input)) > 1) {
+        while ((j = readline(bot_w, 1, 8, input, scp)) > 1) {
           switch (j) {
           case 4:              // F4 -> quit program
             exit_program();
@@ -470,14 +470,6 @@ void parameter_dialog() {
       if (mincharspeed > 10)
         mincharspeed -= 10;
       break;
-    case 'c':
-      readline(conf_w, 5, 25, mycall);
-      if (strlen(mycall) == 0)
-        strcpy(mycall, "NOCALL");
-      else if (strlen(mycall) > 7)          // cut excessively long calls
-        mycall[7] = '\0';
-      p = 0;                                // cursor position
-      break;
     case 'd':                               // go to database browser
         curs_set(1);
         callbase_dialog();
@@ -538,17 +530,15 @@ void update_parameter_dialog() {
             "    left/right", mincharspeed, mincharspeed / 5);
   mvwprintw(conf_w, 4, 2, "CW rise/falltime (ms): %1.1f           "
             "       +/-", edge);
-  mvwprintw(conf_w, 5, 2, "Callsign:              %-14s"
-            "       c", mycall);
-  mvwprintw(conf_w, 6, 2, "CW pitch (0 = random): %-4d"
+  mvwprintw(conf_w, 5, 2, "CW pitch (0 = random): %-4d"
             "                 k/l or 0", (fixedtone) ? ctonefreq : 0);
-  mvwprintw(conf_w, 7, 2, "CW waveform:           %-8s"
+  mvwprintw(conf_w, 6, 2, "CW waveform:           %-8s"
             "             w", wavename);
-  mvwprintw(conf_w, 8, 2, "Unlimited repeat:      %-3s"
+  mvwprintw(conf_w, 7, 2, "Unlimited repeat:      %-3s"
             "                  f", (unlimitedrepeat ? "yes" : "no"));
-  mvwprintw(conf_w, 9, 2, "Fixed CW speed:        %-3s"
+  mvwprintw(conf_w, 8, 2, "Fixed CW speed:        %-3s"
             "                  s", (fixspeed ? "yes" : "no"));
-  mvwprintw(conf_w, 11, 2, "callbase:  %-15s"
+  mvwprintw(conf_w, 10, 2, "callbase:  %-15s"
             "   d (%d)", basename(cbfilename), nrofcalls-1);
 
   mvwprintw(conf_w, 14, 2, "Press Enter to continue");
@@ -569,7 +559,7 @@ void callbase_dialog() {
 
 
 // read call data
-static int readline(WINDOW *win, int y, int x, char *line) {
+static int readline(WINDOW *win, int y, int x, char *line, int scp) {
   int c;
   int i = 0;
 
@@ -601,7 +591,7 @@ static int readline(WINDOW *win, int y, int x, char *line) {
          (c == '+') || (c == '?')) && (strlen(line) < 14)) {
 
       // for single character practice
-      if (singlechar) {
+      if (scp) {
         line[p] = toupper(c);
         line[p + 1] = '\0';
         break;
@@ -1202,8 +1192,8 @@ int read_callbase() {
   }
   maxlen++;
   // for single character practice
-  if (maxlen == 3) singlechar = 1;
-  else singlechar = 0;
+  if (maxlen == 3) scp = 1;
+  else scp = 0;
 
   if (!nr) {
     endwin();
