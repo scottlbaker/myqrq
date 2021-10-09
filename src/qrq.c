@@ -345,7 +345,7 @@ int main(int argc, char *argv[]) {
         check_thread(j);
 
         // check for function key press
-        while ((j = readline(bot_w, 1, 8, input, scp)) > 1) {
+        while ((j = readline(bot_w, 1, 10, input, scp)) > 1) {
           switch (j) {
           case 4:              // F4 -> quit program
             exit_program();
