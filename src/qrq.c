@@ -388,18 +388,24 @@ int main(int argc, char *argv[]) {
       // attempt is over
       callnr = 0;
       i = nrofcalls-1;
-      pthread_join(cwthread, NULL);  // wait for cwthread to finish
+      pthread_join(cwthread, NULL);   // wait for cwthread to finish
       curs_set(0);
       wattron(bot_w, A_BOLD);
       mvwprintw(bot_w, 1, 1, "%d/%d completed.. Press any key to continue!", i,i);
       wattroff(bot_w, A_BOLD);
       wrefresh(bot_w);
-
       j = pthread_create(&cwthread, NULL, &morse, (void *)"EE");
       check_thread(j);
-      pthread_join(cwthread, NULL);  // wait for cwthread to finish
-      
-      getch();
+      pthread_join(cwthread, NULL);   // wait for cwthread to finish
+
+      j = (int)getch();
+      // check for F7 (repeat last)
+      while (j == KEY_F(7)) {
+        j = pthread_create(&cwthread, NULL, &morse, previouscall);
+        check_thread(j);
+        pthread_join(cwthread, NULL); // wait for CW thread to finish
+        j = (int)getch();
+      }
       mvwprintw(bot_w, 1, 1, "                                            ");
       curs_set(1);
     }
@@ -423,8 +429,8 @@ void parameter_dialog() {
 
   update_parameter_dialog();
 
-  while ((j = getch()) != 0) {
-    switch ((int)j) {
+  while ((j = (int)getch()) != 0) {
+    switch (j) {
     case '+':                               // rise/falltime
       if (edge <= 9.0)
         edge += 0.1;
@@ -1285,7 +1291,7 @@ void exit_program() {
 
 
 long long get_ms() {
-  struct timeval te; 
+  struct timeval te;
   gettimeofday(&te, NULL);
   long long ms = te.tv_sec*1000LL + te.tv_usec/1000;
   return ms;
